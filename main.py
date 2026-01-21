@@ -9,22 +9,18 @@ nnfs.init()
 X, y =  spiral_data(100, 3)
 
 class Layer_Dense:
-    #initialize weights and biases
     def __init__(self,  n_inputs, n_neurons):
-        # weights  equal 0.10 * between numbers of inputs and neurons
         self.weights = 0.10 * np.random.randn(n_inputs, n_neurons)
-        # add  zeros  at least one to   n_neurons
         self.biases = np.zeros((1, n_neurons))
-    #calculate output answer
+
     def forward(self, inputs):
         self.inputs = inputs
         self.output = np.dot(inputs,  self.weights) + self.biases
 
-    def backward(self, d_out):
-        self.dweights = np.dot(self.inputs.T, d_out)
-        self.dbiases = np.sum(d_out, axis=0, keepdims=True)
-        self.dinputs = np.dot(d_out, self.weights.T)
-
+    def backward(self, dvalues):
+        self.dweights = np.dot(self.inputs.T, dvalues)
+        self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
+        self.dinputs = np.dot(dvalues, self.weights.T)
         return self.dinputs
 
 class Activation_ReLU:
@@ -40,6 +36,15 @@ class Activation_Softmax:
     def forward(self, inputs):
         exp_values = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         self.output = exp_values / np.sum(exp_values, axis=1, keepdims=True)
+    def backward(self, dvalues):
+        self.dinputs =  np.empty_like(dvalues)
+        for index, (single_output, single_dvalues) in \
+                enumerate(zip(self.output, dvalues)):
+            single_output = single_output.reshape(-1, 1)
+            jacobian_matrix = np.diagflat(single_output) - \
+                              np.dot(single_output, single_output.T)
+            self.dinputs[index] = np.dot(jacobian_matrix, single_dvalues)
+        return self.dinputs
 
 class Loss:
     def calculate(self, output, y):
@@ -57,72 +62,82 @@ class Loss_CategoricalCrossentropy(Loss):
             correct_confidences = np.sum(y_pred_clipped * y_true, axis=1)
         negative_log_likelihoods = -np.log(correct_confidences)
         return negative_log_likelihoods
-
     def backward(self, dvalues, y_true):
         samples = len(dvalues)
-
-        # Si y_true contient des labels entiers
         if len(y_true.shape) == 1:
-            # Copier les prédictions
             dvalues = dvalues.copy()
-            # Soustraire 1 à la bonne classe
             dvalues[range(samples), y_true] -= 1
-
-        # Si y_true est one-hot
         elif len(y_true.shape) == 2:
             dvalues = dvalues.copy()
             dvalues -= y_true
-
-        # Normaliser
         dvalues /= samples
-
         return dvalues
 
+class Activation_Softmax_Loss_CategoricalCrossentropy():
+    def __init__(self):
+        self.activation = Activation_Softmax()
+        self.loss = Loss_CategoricalCrossentropy()
+    def forward(self, inputs, y_true):
+        self.activation.forward(inputs)
+        self.output = self.activation.output
+        return np.mean(self.loss.forward(self.output, y_true))
+    def backward(self, dvalues, y_true):
+        samples = len(dvalues)
+        if len(y_true.shape) == 2:
+            y_true = np.argmax(y_true, axis=1)
+        self.d_inputs = dvalues.copy()
+        self.d_inputs[range(samples), y_true] -= 1
+        self.d_inputs = self.d_inputs / samples
+        return self.d_inputs
+
 class Optimizer_SGD:
-    def __init__(self, learning_rate):
+    def __init__(self, learning_rate= 1., decay= 0.):
         self.learning_rate = learning_rate
+        self.current_learning_rate = learning_rate
+        self.decay = decay
+        self.epoch = 0
+    def pre_update_params(self):
+        self.current_learning_rate = (self.learning_rate *
+                                      (1. / (1. + self.decay * self.epoch)))
     def update_params(self, layer):
-        layer.weights -= self.learning_rate * layer.dweights
-        layer.biases  -= self.learning_rate * layer.dbiases
+        layer.weights -= self.current_learning_rate * layer.dweights
+        layer.biases  -= self.current_learning_rate * layer.dbiases
+    def post_update_params(self):
+        self.epoch += 1
 
 
-# --- Création des couches ---
-layer1 = Layer_Dense(2, 3)
+layer1 = Layer_Dense(2, 64)
 activation1 = Activation_ReLU()
 
-layer2 = Layer_Dense(3, 3)
+layer2 = Layer_Dense(64, 3)
 activation2 = Activation_Softmax()
 
-loss_function = Loss_CategoricalCrossentropy()
-optimizer = Optimizer_SGD(learning_rate=0.1)
+loss_activation_function = Activation_Softmax_Loss_CategoricalCrossentropy()
+optimizer = Optimizer_SGD(decay = 1e-2)
 
-# --- Boucle d'entraînement ---
-for epoch in range(1000001):
+for epoch in range(10001):
 
-    # Forward pass
     layer1.forward(X)
     activation1.forward(layer1.output)
-
     layer2.forward(activation1.output)
-    activation2.forward(layer2.output)
+    loss = loss_activation_function.forward(layer2.output, y)
 
-    # Calcul de la loss
-    loss = loss_function.calculate(activation2.output, y)
-
-    # Calcul de l'accuracy (juste pour voir si ça marche)
-    predictions = np.argmax(activation2.output, axis=1)
+    predictions = np.argmax(loss_activation_function.output, axis=1)
     accuracy = np.mean(predictions == y)
 
-    # Backward pass
-    dvalues = loss_function.backward(activation2.output, y)
+    dvalues = loss_activation_function.backward(loss_activation_function.output, y)
     dvalues = layer2.backward(dvalues)
     dvalues = activation1.backward(dvalues)
-    dvalues = layer1.backward(dvalues)
+    layer1.backward(dvalues)
 
-    # Update des poids
-    optimizer.update_params(layer2)
+
+    optimizer.pre_update_params()
     optimizer.update_params(layer1)
+    optimizer.update_params(layer2)
+    optimizer.post_update_params()
 
-    # Affichage toutes les 1000 epochs
-    if epoch % 1000 == 0:
-        print(f"epoch {epoch}, loss {loss:.4f}, accuracy {accuracy:.4f}")
+    if not epoch % 100:
+        print(f'epoch: {epoch}, ' +
+              f'acc: {accuracy:.3f}, ' +
+              f'loss: {loss:.3f}, ' +
+              f'lr: {optimizer.current_learning_rate}')
