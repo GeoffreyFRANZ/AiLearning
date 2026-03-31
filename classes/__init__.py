@@ -5,3 +5,4 @@ from .Activation_Softmax import Activation_Softmax
 from .Loss_CategoricalCrossentropy import Loss_CategoricalCrossentropy
 from .Activation_Softmax_Loss_CategoricalCrossentropy import Activation_Softmax_Loss_CategoricalCrossentropy
 from .Optimizer_SGD import Optimizer_SGD
+from .Optimizer_Adagrad import Optimizer_Adagrad
