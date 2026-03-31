@@ -3,7 +3,8 @@ import nnfs
 from nnfs.datasets import spiral_data
 from classes import (Layer_Dense, Activation_Softmax,
                      Activation_ReLU, Optimizer_SGD,
-                     Activation_Softmax_Loss_CategoricalCrossentropy, Optimizer_Adagrad,
+                     Activation_Softmax_Loss_CategoricalCrossentropy,
+                     Optimizer_Adagrad, Optimizer_RMSProp
                      )
 
 nnfs.init()
@@ -12,7 +13,7 @@ layer1 = Layer_Dense(2, 64)
 activation1 = Activation_ReLU()
 layer2 = Layer_Dense(64, 3)
 loss_activation_function = Activation_Softmax_Loss_CategoricalCrossentropy()
-optimizer = Optimizer_Adagrad(decay = 1e-4)
+optimizer = Optimizer_RMSProp(decay = 1e-4)
 for epoch in range(10001):
     layer1.forward(X)
     activation1.forward(layer1.output)
