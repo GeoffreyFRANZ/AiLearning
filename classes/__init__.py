@@ -7,3 +7,4 @@ from .Activation_Softmax_Loss_CategoricalCrossentropy import Activation_Softmax_
 from .Optimizer_SGD import Optimizer_SGD
 from .Optimizer_Adagrad import Optimizer_Adagrad
 from .Optimizer_RMSProp import Optimizer_RMSProp
+from .Optimizer_Adam import Optimizer_Adam
